@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import json
+import re
+from typing import Any, Dict, Optional
+
+from src.foundation_sar import CaseData, RiskAnalystOutput, ExplainabilityLogger
+
+
+COT_SYSTEM_PROMPT = """You are a senior financial crime Risk Analyst at a bank.
+
+Use Chain-of-Thought reasoning to analyze the case:
+1) Data Review
+2) Pattern Recognition
+3) Regulatory Mapping
+4) Risk Quantification
+5) Classification Decision
+
+Return ONLY valid JSON with keys:
+- classification: one of [Structuring, Sanctions, Fraud, Money_Laundering, Other]
+- confidence_score: float 0..1
+- risk_level: one of [Low, Medium, High, Critical]
+- reasoning: concise explanation
+- key_indicators: list of strings
+"""
+
+
+class RiskAnalystAgent:
+    def __init__(self, client: Any, logger: ExplainabilityLogger, model: str = 'gpt-4o-mini'):
+        self.client = client
+        self.logger = logger
+        self.model = model
+
+    def analyze_case(self, case: CaseData | Dict[str, Any]) -> RiskAnalystOutput:
+        case_dict = case.model_dump() if hasattr(case, 'model_dump') else case
+
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {'role': 'system', 'content': COT_SYSTEM_PROMPT},
+                {'role': 'user', 'content': json.dumps(case_dict)}
+            ],
+            temperature=0.2,
+        )
+        text = resp.choices[0].message.content
+        data = self._extract_json(text)
+        out = RiskAnalystOutput(**data)
+        self.logger.log('risk_analysis', out.model_dump())
+        return out
+
+    def _extract_json(self, text: str) -> Dict[str, Any]:
+        # Remove fenced blocks if present
+        text = text.strip()
+        fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if fence:
+            candidate = fence.group(1)
+            return json.loads(candidate)
+
+        start = text.find('{')
+        end = text.rfind('}')
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError('No JSON object found in model response')
+        candidate = text[start:end+1]
+        return json.loads(candidate)

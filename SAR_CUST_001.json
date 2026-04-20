@@ -1,0 +1,4 @@
+customer_id,name,date_of_birth,ssn_last_4,address,customer_since,risk_rating,phone,email
+CUST_001,Alex Morgan,1990-01-01,1234,123 Main St,2020-01-01,High,,
+CUST_002,Jamie Chen,1985-05-12,5678,45 River Rd,2018-06-15,Medium,,
+CUST_003,Taylor Singh,1979-09-09,9012,9 Park Ave,2015-03-20,Low,,

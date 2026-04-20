@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import json
+import re
+from typing import Any, Dict
+
+from src.foundation_sar import CaseData, RiskAnalystOutput, ComplianceOfficerOutput, ExplainabilityLogger
+
+
+REACT_SYSTEM_PROMPT = """You are a bank Compliance Officer drafting a Suspicious Activity Report (SAR) narrative for FinCEN.
+
+Use ReACT:
+REASONING: plan how to describe who/what/when/where/why based on the analyst findings.
+ACTION: produce a concise SAR narrative.
+
+Return ONLY valid JSON with keys:
+- narrative: <= 120 words
+- regulatory_citations: list of strings (e.g., 'BSA 31 U.S.C. 5318(g)', 'FinCEN SAR Guidance')
+"""
+
+
+class ComplianceOfficerAgent:
+    def __init__(self, client: Any, logger: ExplainabilityLogger, model: str = 'gpt-4o-mini'):
+        self.client = client
+        self.logger = logger
+        self.model = model
+
+    def generate_compliance_narrative(self, case: CaseData | Dict, risk_analysis: RiskAnalystOutput | Dict) -> ComplianceOfficerOutput:
+        case_dict = case.model_dump() if hasattr(case, 'model_dump') else case
+        risk_dict = risk_analysis.model_dump() if hasattr(risk_analysis, 'model_dump') else risk_analysis
+
+        payload = {'case': case_dict, 'risk_analysis': risk_dict}
+
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {'role': 'system', 'content': REACT_SYSTEM_PROMPT},
+                {'role': 'user', 'content': json.dumps(payload)}
+            ],
+            temperature=0.2,
+        )
+        text = resp.choices[0].message.content
+        data = self._extract_json(text)
+
+        # Enforce <=120 words deterministically
+        narrative = data.get('narrative', '')
+        narrative = self._enforce_word_limit(narrative, 120)
+        data['narrative'] = narrative
+
+        out = ComplianceOfficerOutput(**data)
+        self.logger.log('compliance_narrative', out.model_dump())
+        return out
+
+    def _enforce_word_limit(self, text: str, limit: int) -> str:
+        words = text.split()
+        if len(words) <= limit:
+            return text.strip()
+        return ' '.join(words[:limit]).strip()
+
+    def _extract_json(self, text: str) -> Dict:
+        text = text.strip()
+        fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if fence:
+            return json.loads(fence.group(1))
+        start = text.find('{')
+        end = text.rfind('}')
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError('No JSON object found in model response')
+        return json.loads(text[start:end+1])

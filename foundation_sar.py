@@ -1,0 +1,6 @@
+pandas>=2.0.0
+pydantic>=2.0.0
+openai>=1.0.0
+python-dotenv>=1.0.0
+pytest>=7.0.0
+jupyter>=1.0.0
