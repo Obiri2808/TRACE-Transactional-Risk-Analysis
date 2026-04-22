@@ -1,6 +1,11 @@
-pandas>=2.0.0
-pydantic>=2.0.0
-openai>=1.0.0
-python-dotenv>=1.0.0
-pytest>=7.0.0
-jupyter>=1.0.0
+from pydantic import BaseModel
+from typing import List
+
+class CustomerData(BaseModel):
+    customer_id: str
+    risk_rating: str
+
+class TransactionData(BaseModel):
+    transaction_id: str
+    amount: float
+``
